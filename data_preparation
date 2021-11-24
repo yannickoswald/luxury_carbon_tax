@@ -10,7 +10,7 @@
 ##### 'infrastructure' loading ######
 import os
 os.getcwd()
-os.chdir("C:/Users/eeyo/Dropbox/Bildung/PhD/3. paper")
+os.chdir("your pathway")
 
 
 import pandas as pd 
