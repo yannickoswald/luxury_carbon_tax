@@ -1,0 +1,565 @@
+#### i used Pthon 3.7, Spyder 4.1.5. 
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+##############################################  SET UP BASICS #######################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+
+##### 'infrastructure' loading ######
+import os
+os.getcwd()
+os.chdir("C:/Users/eeyo/Dropbox/Bildung/PhD/3. paper")
+
+
+import pandas as pd 
+import math 
+import numpy as np 
+import matplotlib.pyplot as plt
+import sympy as sp
+import scipy.special as ssp
+import copy
+from gini import *
+from lin_fit import *
+from scipy.stats import gamma
+import math as math
+from sympy import Symbol 
+from sympy.solvers import solveset
+from sympy import erf
+from sympy import log
+from sympy import sqrt
+from sympy import N
+from matplotlib import rc
+import matplotlib.gridspec as gridspec
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output
+from scipy.special import erfinv
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from numpy import asarray
+from numpy import savetxt
+
+
+################################################################################
+################# constructing original dataframe ##############################
+################################################################################
+##########containing countries' emissions, expenditures and populations ########
+
+### creating index ###
+codes0 = np.genfromtxt('countries_code.csv', dtype = str, delimiter=',')
+classes0 = np.genfromtxt('income_classes.csv', dtype = str, delimiter=',')
+region0 = np.genfromtxt('country_region.csv', dtype = str, delimiter=',')
+classification0 = np.genfromtxt('country_class.csv', dtype = str, delimiter=',')
+codes = codes0.tolist()
+classes = classes0.tolist()
+region = region0.tolist()
+classification = classification0.tolist()
+tuple_list = list(zip(classification, region, codes, classes))
+tuple_list_short_pre = list(zip(classification, region, codes))
+
+####https://stackoverflow.com/questions/25650376/how-to-remove-duplicates-from-a-list-of-tuples-but-keeping-the-original-order/25650833
+
+
+tuple_list_short = sorted(set(tuple_list_short_pre), key=tuple_list_short_pre.index)
+header = pd.MultiIndex.from_tuples(tuple_list,
+                                    names=['classification', 'region', 'country','income_class'])
+
+names = ['Food_cf',
+         'Alcohol and Tobacco_cf',
+         'Wearables_cf',
+         'Other Housing_cf',
+         'Heating and Electricity_cf',	
+         'Household Appliances and Services_cf',	
+         'Health_cf',
+         'Vehicle Purchase_cf',	
+         'Vehicle Fuel and Maintenance_cf',
+         'Other Transport_cf',	
+         'Communication_cf',
+         'Recreational_cf',	
+         'Package Holiday_cf',	
+         'Education_Finance_Luxury_cf',
+         'Food_exp',
+         'Alcohol and Tobacco_exp',
+         'Wearables_exp',
+         'Other Housing_exp',
+         'Heating and Electricity_exp',	
+         'Household Appliances and Services_exp',	
+         'Health_exp',
+         'Vehicle Purchase_exp',	
+         'Vehicle Fuel and Maintenance_exp',
+         'Other Transport_exp',	
+         'Communication_exp',
+         'Recreational_exp',	
+         'Package Holiday_exp',	
+         'Education_Finance_Luxury_exp',
+         'population']
+
+###dataframe### 0:14 is carbon dioxide emission 14:28 is expenditure 29 is population
+data = np.genfromtxt('countries_data.csv', delimiter=',')
+df = pd.DataFrame(data, columns=header, index = names)
+
+##### clean dataframe
+#### kick out all where columns every element = 0 #######
+df2 = df.loc[:, (df != 0).any(axis=0)]
+#### slicing example df2.loc['Food_cf', ('Upper middle income', 'Eastern Europe and Central Asia', 'ALB')] #######
+df2.loc['Food_exp', (tuple_list[0][0:3])]
+df2.loc['population', (tuple_list[0][0:3])]
+
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+#################  INTERPOLATION *EXPENDITURE* missing data values mostly in package holiday and vehicle purchases ####################
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+
+###compute mean exp per country take 1% of total expenditure per capita for necessary estimation in missing data values. Over all countries vehicle purchases, recreational items and package holiday
+column_name = ['mean_exp', 'mean_carbon']
+df_means = pd.DataFrame(columns = column_name, index = tuple_list)
+
+for j in range(0,384):   
+    df_means['mean_exp'][tuple_list[j]] =  sum(df[tuple_list[j]][14:28])/df[tuple_list[j]][28]
+    df_means['mean_carbon'][tuple_list[j]]  =  sum(df[tuple_list[j]][0:14])/df[tuple_list[j]][28]   
+    
+df_means2 = df_means.dropna()    
+estimated_interpolation_data = df_means2['mean_exp']*0.01
+
+##### total exp. volume pre-interpolation #####
+subset_exp_pre = df2[14:28][0:379].sum(1)
+total_world_expenditure_pre_interpolation_gaps = sum(subset_exp_pre)
+
+####################################### find all missing, i.e. equal to zero, data values, in our data frame###################
+def search_coordinate(df_data: pd.DataFrame, search_set: set) -> list:
+    ##### from https://stackoverflow.com/questions/21800169/python-pandas-get-index-of-rows-which-column-matches-certain-value
+    nda_values = df_data.values
+    tuple_index = np.where(np.isin(nda_values, [e for e in search_set]))
+    return [(row, col, nda_values[row][col]) for row, col in zip(tuple_index[0], tuple_index[1])]
+
+result_list = search_coordinate(df2, {0})
+missing_values_coordinates = result_list[162:324]  ##### actual results for expenditure data only, not for carbon
+
+#########################################  FINALLY INTERPOLATING EXPENDITURE ###############################################################################################################
+
+for i in range(0,162):
+    coord_help = missing_values_coordinates[i][0:2]
+    df2.iloc[coord_help[0]][coord_help[1]]=estimated_interpolation_data[coord_help[1]]*df2.loc['population'][coord_help[1]] ###### 1% of per capita total consumption multiplied with population to arrive at interpolation estimate
+
+##### checking how much bigger interpolated is compared to original one ########
+
+subset_exp = df2[14:28][0:379].sum(1)
+total_world_expenditure_post_interpolation_gaps = sum(subset_exp)
+per_cent_diff = (total_world_expenditure_post_interpolation_gaps/total_world_expenditure_pre_interpolation_gaps-1)*100
+#### 0.21% difference so not much
+
+###############################################################################################################################################
+################ extra post correcting interpolation e.g. Ireland were interpolated trend from above definitely does not make sense ###########
+###############################################################################################################################################
+### because ireland has gaps for a few quintiles but not all. interpolation now a linear fit for first 4 quintiles
+
+df2.loc['Package Holiday_exp'][tuple_list_short[70]][0] = 6766823.525
+df2.loc['Package Holiday_exp'][tuple_list_short[70]][2] = 17204861.14
+
+
+
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+#################  INTERPOLATION *CARBON FOOTPRINTS* missing data values mostly in package holiday and vehicle purchases ##############
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+
+###### we just interpolate via the average global carbon intensity to keep computation at a minimum ##### 
+
+
+#STEP 1
+##### compute average carbon intensity ##### 
+subset_cf_sum = df2[0:14][0:379].sum(1)
+a = subset_cf_sum.to_numpy()
+b = subset_exp_pre.to_numpy()
+carbon_intensities_global_average = np.divide(a,b)
+
+#STEP 2 just multiply above calculated intensity when there is a 0 in cf section of df 2 with expenditure and replace 0 in cf section. 
+
+####################################### find all missing, i.e. equal to zero, data values, in our data frame###################
+def search_coordinate(df_data: pd.DataFrame, search_set: set) -> list:
+    nda_values = df_data.values
+    tuple_index = np.where(np.isin(nda_values, [e for e in search_set]))
+    return [(row, col, nda_values[row][col]) for row, col in zip(tuple_index[0], tuple_index[1])]
+
+new_result_list = search_coordinate(df2, {0})
+
+subset_emissions = df2[0:14][0:379].sum(1)
+pre_interpolation_sum_carbon_emissions = sum(subset_emissions)
+
+for i in range(0,162):
+    coord_help = new_result_list[i][0:2]
+    df2.iloc[coord_help[0]][coord_help[1]]=df2.iloc[coord_help[0]+14][coord_help[1]]*carbon_intensities_global_average[coord_help[0]] ###### 1% of per capita total consumption multiplied with population to arrive at interpolation estimate
+
+#STEP 3 check whether difference is of reasonable magnitude. 
+
+subset_emissions_post = df2[0:14][0:379].sum(1)
+post_interpolation_sum_carbon_emissions = sum(subset_emissions_post)
+per_cent_diff_em=(post_interpolation_sum_carbon_emissions/pre_interpolation_sum_carbon_emissions-1)*100
+### ~ 0.5%, it is okay.
+
+
+
+#########################################################################################################################
+#########################################################################################################################
+######################  compute necessary log normal interpolation parameters ###########################################
+#########################################################################################################################
+#########################################################################################################################
+
+####### take country codes and consumption categories and prepare dataframe for Gini coefficients
+a = list(sorted(set(codes0), key = codes.index))
+df3 = pd.DataFrame(columns = names[14:28], index = a)
+
+
+############################################
+#######  #1 compute gini coefficients#######
+############################################
+
+for i in range(0,14):
+    for j in range(0,88):
+           df3.iloc[
+               df3.index.get_loc(tuple_list_short[j][2]),
+               df3.columns.get_loc(names[14:28][i]) 
+                                                   ] = gini(
+                                                            df2.loc['population', (tuple_list_short[j][0:3])], 
+                                                            df2.loc[names[14:28][i], (tuple_list_short[j][0:3])]
+                                                                                                )
+                                                       
+################################################################
+####### #2 compute sigmas of the log normal distribution #######
+################################################################
+df4 = pd.DataFrame(columns = names[14:28], index = a)
+for i in range(0,14):
+    for j in range(0,88):
+                   df4.iloc[
+                           df4.index.get_loc(tuple_list_short[j][2]),
+                           df4.columns.get_loc(names[14:28][i]) 
+                                                               ] = 2*ssp.erfinv(df3[names[14:28][i]][tuple_list_short[j][2]])
+        
+################################################################
+####### #3 compute means of X and means log(X) #################
+################################################################
+#means of X 
+df5 = pd.DataFrame(columns = names[14:28], index = a)
+for i in range(0,14):
+    for j in range(0,88):
+           df5.iloc[
+               df5.index.get_loc(tuple_list_short[j][2]),
+               df5.columns.get_loc(names[14:28][i]) 
+                                                   ] = sum(df2.loc[names[14:28][i], (tuple_list_short[j][0:3])])/sum(df2.loc['population', (tuple_list_short[j][0:3])])
+                                                                               
+#calculate variance from df5
+df6 = pd.DataFrame(columns = names[14:28], index = a)
+
+
+for i in range(0,14):
+    for j in range(0,88):
+        df6.iloc[
+               df6.index.get_loc(tuple_list_short[j][2]),
+               df6.columns.get_loc(names[14:28][i]) 
+                                                   ] = (np.exp(df4[names[14:28][i]][tuple_list_short[j][2]]*df4[names[14:28][i]][tuple_list_short[j][2]])-1)*(df5[names[14:28][i]][tuple_list_short[j][2]]*df5[names[14:28][i]][tuple_list_short[j][2]])
+      
+        
+#calculate MU
+df7 = pd.DataFrame(columns = names[14:28], index = a)
+for i in range(0,14):
+    for j in range(0,88):
+        df7.iloc[
+               df7.index.get_loc(tuple_list_short[j][2]),
+               df7.columns.get_loc(names[14:28][i]) 
+                                                   ] = np.log(np.divide(np.square(df5[names[14:28][i]][tuple_list_short[j][2]]),np.sqrt(df6[names[14:28][i]][tuple_list_short[j][2]]+np.square(df5[names[14:28][i]][tuple_list_short[j][2]]))))
+      
+###### Now that we have MU and SIGMA for the logged variables we can interpolate expenditure overall countries and categories
+
+
+###### make total population vector per country
+### GCD = global consumption database
+population_total_GCD = np.zeros((1,88));
+for i in range(1,89):
+    population_total_GCD[0,i-1]= df2.loc['population'][tuple_list_short[i-1]].sum();
+    
+    
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################
+#########################################  INTERPOLATION FOR GRANULARITY EXPENDITURE ################################################
+#####################################################################################################################################
+#####################################################################################################################################
+#####################################################################################################################################                                                
+##############################################################################       
+#set up dataframe with column names being the interpolated income classes 
+l = list()                                                                               
+for i in range(0,88):         
+    for j in range(14,28):
+        new_tuple = tuple_list_short[i]+(names[j],)    
+        l.append(new_tuple)
+l2 = list()  
+for i in range(1,101):
+       l2.append(str(i))
+df_BIG = pd.DataFrame(columns = l2, index = l)
+##############################################################################        
+
+
+#### numerical integration meaning we solve the quantile function for 1000 quantiles and then sum up the numerical integral to 100     
+
+n = 1000
+l3 = list()  
+for i in range(1,n+1):
+       l3.append(str(i))
+
+
+df_BIG2 = pd.DataFrame(columns = l3, index = l)
+
+
+for i in range(0,1232):       
+   for j in range(1,n+1):
+     if j > 1:
+            ###j-1/n gives you the percentile moved to the right by one because you want to start at the 0th percentile and then numerically integrate "from the left"             
+          df_BIG2.iloc[i,j-1] = float(np.exp(df7.loc[df_BIG2.index[i][2]][df_BIG2.index[i][3]]+np.sqrt(2)*df4.loc[df_BIG2.index[i][2]][df_BIG2.index[i][3]]*ssp.erfinv(2*((j-1)/n)-1))) 
+     else:
+         ### start at 0th percentile/quantile approximate by n/10 e.g. for 1000 quantiles start at 1/1000/10 = 0.0001
+          df_BIG2.iloc[i,j-1] = float(np.exp(df7.loc[df_BIG2.index[i][2]][df_BIG2.index[i][3]]+np.sqrt(2)*df4.loc[df_BIG2.index[i][2]][df_BIG2.index[i][3]]*ssp.erfinv(2*j/n/10-1)))
+   print("iteration is " + str(i))
+          
+
+#### reduce df_BIG2 via averaging (equivalent to numerical integration) over ten quantiles down to df_BIG which is percentiles
+
+for i in range(1,int(n/10+1)):
+      df_BIG.iloc[:,i-1] = df_BIG2.iloc[:,i*10-10:i*10].sum(axis = 1)/10
+
+
+##INTERPOLATE POPULATION PERCENTILES. THIS DATA NEEDS TO BE CORRECTED FOR THE MEAN OF EXPENDITURE
+#### results are sensitive on the numerical integration the highest percentile. so it is important whether you integrate till 0.999 or 0.99999. However the overall trends/results do not change with changes in the exact numerical values.
+#for i in range(0,1232):       
+ #  for j in range(1,101):
+  #   if j < 100:             
+   #       df_BIG.iloc[i,j-1] = np.exp(df7.loc[df_BIG.index[i][2]][df_BIG.index[i][3]]+np.sqrt(2)*df4.loc[df_BIG.index[i][2]][df_BIG.index[i][3]]*ssp.erfinv(2*j/100-1))
+    # else:
+     #     df_BIG.iloc[i,j-1] = np.exp(df7.loc[df_BIG.index[i][2]][df_BIG.index[i][3]]+np.sqrt(2)*df4.loc[df_BIG.index[i][2]][df_BIG.index[i][3]]*ssp.erfinv(2*0.999-1))
+          
+
+
+expenditure_mean_after_interpolation = df_BIG.sum(1)/100
+
+#### make list or df of means before the whole interpolation based on df2 then compare and correct interpolated data to mean consumption volume
+expenditure_mean_before_interpolation_list= list()
+expenditure_mean_before_interpolation_array = np.zeros(1232)
+
+#####################COMPUTE CORRECTION FACTOR to BRING INTERPOLATED DATA BACK TO REAL WORLD MEAN LEVEL##########      
+for i in range(0,1232):
+       expenditure_mean_before_interpolation_array[i]= df2.loc[expenditure_mean_after_interpolation.index[i][3]][expenditure_mean_after_interpolation.index[i][0:3]].sum()/df2.loc[names[28]][expenditure_mean_after_interpolation.index[i][0:3]].sum()
+
+correction_factor = expenditure_mean_after_interpolation/expenditure_mean_before_interpolation_array
+df_BIG_copy = copy.deepcopy(df_BIG)
+#####################NOW APPLY correction factor to df_BIG L##########     
+for i in range(1,101):  
+     df_BIG[str(i)] = df_BIG[str(i)]/correction_factor
+     
+security_test = df_BIG_copy/df_BIG #### here the test needs to show that the copy is exactly as much 
+### bigger than the df_BIG as the correction_factor says
+
+
+
+############################################################################################################################################
+############################################################################################################################################
+############################################################################################################################################
+###############################  CREATE Income elasticities of demand df and carbon intensity (kg/$)df ###########################################
+############################################################################################################################################
+############################################################################################################################################
+############################################################################################################################################  
+###elasticities####
+expenditure = df2.loc[names[14:28]][0:379]
+population = df2.loc[names[28]][0:379]
+sum_expenditure = expenditure.sum()
+total_exp_per_capita = sum_expenditure/population
+expenditure_per_capita = expenditure.loc[names[14:28]]/population
+
+#### CHECK WHETHER CORRECT ORDER
+income_elasticities = np.zeros(1232)
+income_elasticities_SE = np.zeros(1232)
+income_elasticities_RR = np.zeros(1232)
+for i in range(0,1232):
+   income_elasticities[i] = lin_fit(total_exp_per_capita.loc[expenditure_mean_after_interpolation.index[i][0:3]], expenditure_per_capita.loc[expenditure_mean_after_interpolation.index[i][3]][expenditure_mean_after_interpolation.index[i][0:3]])[1]
+   income_elasticities_SE[i] = lin_fit(total_exp_per_capita.loc[expenditure_mean_after_interpolation.index[i][0:3]], expenditure_per_capita.loc[expenditure_mean_after_interpolation.index[i][3]][expenditure_mean_after_interpolation.index[i][0:3]])[4]
+   income_elasticities_RR[i] =  lin_fit(total_exp_per_capita.loc[expenditure_mean_after_interpolation.index[i][0:3]], expenditure_per_capita.loc[expenditure_mean_after_interpolation.index[i][3]][expenditure_mean_after_interpolation.index[i][0:3]])[2]                                                                                                                                                                                                                                              
+
+plt.scatter(income_elasticities, income_elasticities_SE);
+plt.scatter((income_elasticities_SE), (income_elasticities_RR));
+                                                                                                                                                                                                                                                       
+###intensities#### in kg/$ PPP 
+cf_total = df2.loc[names[0:14]][0:379]
+cf_per_capita = cf_total.loc[names[0:14]]/population
+
+carbon_intensities = np.zeros(1232)
+###### order of carbon_intensities like in expenditure mean after interpolation 
+for i in range(0,1232):
+   carbon_intensities[i] = cf_total.loc[expenditure_mean_after_interpolation.index[i][3][:-3]+'cf'][expenditure_mean_after_interpolation.index[i][0:3]].sum()/expenditure.loc[expenditure_mean_after_interpolation.index[i][3]][expenditure_mean_after_interpolation.index[i][0:3]].sum()
+
+
+############################################################################################################################################
+############################################################################################################################################
+############################################################################################################################################
+###############################  CREATE BASE CARBON ACCOUNTS  ##############################################################################
+############################################################################################################################################
+############################################################################################################################################
+############################################################################################################################################ 
+#### create population vector so it fits to df_BIG ####
+### i need whole population in every country then dividie by 100 #####
+#### we use the World Bank population vector for this which differs for some countries from the GCD vector. See supp mat. 
+population_WB_2019_country_code_2011_order = np.genfromtxt('population_WB_2019_country_code_2011_order.csv', dtype = str, delimiter=',')
+population_2011_2019_WB = np.genfromtxt('population_2011_2019.csv', dtype = float, delimiter =',')
+
+
+population_per_country_per_percentile = np.zeros(1232)
+for i in range(1,89):
+   population_per_country_per_percentile[i*14-14:i*14] = population_2011_2019_WB[i-1,1]/100
+
+
+
+df_BIG_total = df_BIG.multiply(population_per_country_per_percentile, axis = 0)
+
+total_world_expenditure_2011_test_granular = sum(df_BIG_total.sum())
+###CARBON ACCOUNTS so df_BIG_carbon or short df_BIG_C
+
+
+df_BIG_Cpc = df_BIG.multiply(carbon_intensities, axis = 0) ### carbon per capita Cpc
+df_BIG_C = df_BIG_total.multiply(carbon_intensities, axis = 0)
+sum(df_BIG_C.sum())/10**12
+#### 17.54 if i create population_per_country_per_percentile from GCD accounts and 17.65 if from WB accounts  
+
+
+############################################################################################################################################
+############################################################################################################################################
+############################################################################################################################################
+###############################  UPDATE CURRENCY TO PPP 2017 version and "NOW" cast to 2019 ################################################
+############################################################################################################################################
+############################################################################################################################################
+############################################################################################################################################ 
+
+hh_spends_WB = np.genfromtxt('household_spending_WB.csv', dtype = str, delimiter=',')
+codes_WB_spends= np.genfromtxt('codes_WB_spends.csv', dtype = str, delimiter=',').tolist()
+df_spendsWB_time= pd.DataFrame(data=hh_spends_WB[:,0:10], index = codes_WB_spends)
+
+
+sum_2011_dollars = np.zeros((88,1))
+country_code_2011_dollars = list()
+for i in range(1,89):
+    sum_2011_dollars[i-1] = sum(df_BIG_total.iloc[i*14-14:i*14][0:100].sum())
+    country_code_2011_dollars.append(df_BIG_total.index[i*14-14:i*14][0][2])
+    
+#codes_WB_spends.index(country_code_2011_dollars[0])  
+#df_spendsWB_time.iloc[codes_WB_spends.index(country_code_2011_dollars[0])][0]
+
+
+
+############ this correction factor will correct dollars from 2011 to 2017 and also scale consumption volume to 2019 levels instead of 2011 levels ####
+correction_factor_currency = np.zeros((88,1)) #### in the order of country_code_2011_dollars
+for i in range(0,88):
+   correction_factor_currency[i] = float(df_spendsWB_time.iloc[codes_WB_spends.index(country_code_2011_dollars[i])][8])/sum_2011_dollars[i]
+
+  
+
+################# SO THIS NEW DF IS TOTAL SPENDS (NOT PER CAPITA, but total economy) updated to 2019 via base year change and factoring in growth ######
+### NOW POPULATION AND emission intensities need to be updated to 2019 too, for proper per capita and emission account ###
+df_BIG_total_exp_2019 = pd.DataFrame(columns = l2, index = l)
+for i in range(1,89):
+     df_BIG_total_exp_2019.iloc[i*14-14:i*14,0:100] = df_BIG_total.iloc[i*14-14:i*14,0:100]*float(correction_factor_currency[i-1])
+     
+    
+##### make per capita dataframe 2019
+df_BIG_total_exp_2019_pc = pd.DataFrame(columns = l2, index = l)
+
+for i in range(1,89):
+    df_BIG_total_exp_2019_pc.iloc[i*14-14:i*14,0:100]=df_BIG_total_exp_2019.iloc[i*14-14:i*14,0:100]/(float(population_WB_2019_country_code_2011_order[i-1,1])/100)
+
+
+
+############################################################################################################################################
+                                        ################ Intermediate SECURITY CHECKS ######################
+############################################################################################################################################                                          
+
+###### compare mean per capita expenditure 2011 to 2019 nowcasted version
+
+mean_expenditure_2019_now_casted_national = np.zeros((1,88))
+for i in range(1,89):
+    mean_expenditure_2019_now_casted_national[0,i-1] = sum(df_BIG_total_exp_2019_pc.iloc[i*14-14:i*14,0:100].sum())/100
+
+mean_expenditure_2011_national = np.zeros((1,88))
+for i in range(1,89):
+    mean_expenditure_2011_national[0,i-1] = sum(df2.loc[names[14:28]][tuple_list_short[i-1]].sum())/sum(df2.loc['population'][tuple_list_short[i-1]])
+
+
+plt.scatter(mean_expenditure_2011_national,  mean_expenditure_2019_now_casted_national);
+plt.plot([0, 40000], [0, 40000]);
+plt.xlabel('2011 mean expenditure per capita');
+plt.ylabel('2019 mean expenditure per capita');
+plt.show()
+
+
+total_world_expenditure_2019_test = sum(df_BIG_total_exp_2019.sum())/10**12 ### in trillion dollars
+
+#plt.scatter(mean_expenditure_2011_national,  mean_expenditure_2019_now_casted_national);
+#plt.plot([0, 40000], [0, 40000]);
+#plt.xlabel('2011 mean expenditure per capita');
+#plt.ylabel('2019 mean expenditure per capita');
+#plt.yscale('log')
+#plt.xscale('log')
+
+################################################################################################################################
+####MAKE CARBON EMISSIONS GRANULAR INTERPOLATED, NOW CASTED 2019 
+
+carbon_intensity_factor_2011_to_2019 = np.genfromtxt('carbon_intensity_factor_2011_to_2019.csv', dtype = str, delimiter=',')
+
+carbon_intensities_2019_estimate =  np.zeros(1232) #### always keep in mind that these intensities are sophisticated estimates but not more. The process to there is
+#### using data by the Global carbon project on consumption based emissions and see how they change 2011 to 2019, then apply the overall change rate to our 2011
+#### intensities. 
+
+for i in range(1,89):
+   carbon_intensities_2019_estimate[i*14-14:i*14] = carbon_intensities[i*14-14:i*14]*float(carbon_intensity_factor_2011_to_2019[i-1,1])
+
+
+df_BIG_carbon_2019_pc = df_BIG_total_exp_2019_pc.multiply(carbon_intensities_2019_estimate, axis = 0)
+df_BIG_carbon_2019 = df_BIG_total_exp_2019.multiply(carbon_intensities_2019_estimate, axis = 0)
+
+
+
+sum(df_BIG_carbon_2019.sum())/10**12 #### estimate total gigaton carbon emission of households 
+
+sum(df_BIG_total_exp_2019.sum())/10**12
+### across all 88 countries is (sum(df_BIG_carbon_2019.sum())/10**12)/(sum(df_BIG_C.sum())/10**12)
+### after correction of code and method ~ 19.73 so ~12% increase in hh emission from 2011 to 2019 is that realistic? 
+####CO2e increased ~10% according to climate watch rather 9 % https://www.climatewatchdata.org/ghg-emissions?chartType=area&end_year=2011&start_year=1990
+
+
+
+exp_pc_data_array = df_BIG_total_exp_2019_pc.to_numpy().astype(float)
+
+savetxt('df_BIG_total_exp_2019_pc.csv', exp_pc_data_array , delimiter=',')
+
+##### save all important data for next steps 
+#df_BIG_total_exp_2019_pc.to_csv(r"C:\Users\eeyo\Dropbox\Bildung\PhD\3. paper\df_BIG_total_exp_2019_pc.csv")
+#savetxt('carbon_intensities_2019_estimate.csv', carbon_intensities_2019_estimate, delimiter=',')
+#savetxt('income_elasticities.csv', income_elasticities, delimiter=',')
+#savetxt('income_elasticities_SE.csv', income_elasticities_SE, delimiter=',')
+#np.savetxt("labels.csv", l, delimiter =", ",  fmt ='% s') 
+#np.savetxt("population_WB_2019.csv", population_WB_2019_country_code_2011_order, delimiter =", ",  fmt ='% s')
+
+
+
+
+
+########################################## EXTRA PICTURE GINIS VS. ELASTICITIES ######################
+one_column_ginis = df3.stack().reset_index()
+plt.scatter(income_elasticities, one_column_ginis[0])
+plt.xlabel('income elasticity of demand');
+plt.ylabel('Gini coefficient');
+#savetxt('one_column_ginis.csv', one_column_ginis[0], delimiter=',')
