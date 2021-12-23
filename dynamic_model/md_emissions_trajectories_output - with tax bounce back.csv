@@ -1,4 +1,4 @@
-scenario code,1.5 °C,2 °C,BAU,LP,MP,HP,LP.R,MP.R,HP.R,LP.RR,MP.RR,HP.RR,LG1,LG2
+scenario code,1.5 Â°C,2 Â°C,BAU,LP,MP,HP,LP.R,MP.R,HP.R,LP.RR,MP.RR,HP.RR,LG1,LG2
 year,1.5 degree consistent,2 degree consistent,Business as usual,Low price,Medium price,High price,Low price retrofit,Medium price retrofit,High price retrofit,Low price retrofit + redistribution,Medium price retrofit + redistribution,High price retrofit + redistr.,Low growth scenario medium price retrofi + redist.,Low growth scenario low price retrofit + redist.
 2020,18.6666,18.6666,18.67,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875,18.64195875
 2021,17.6366,18.6171,18.62,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918,18.59205918
