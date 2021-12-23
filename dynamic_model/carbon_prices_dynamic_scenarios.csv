@@ -1,0 +1,7 @@
+,scenario\income category,Low income,Lower middle income,Upper middle income,High income
+2022,Low price,5,12.5,25,75
+2022,Medium price,10,25,50,150
+2022,High price,20,50,100,300
+2100,Low price,500,500,500,1000
+2100,Medium price,1000,1000,1000,2000
+2100,High price,2000,2000,2000,4000
