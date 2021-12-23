@@ -10,6 +10,6 @@ There are various data inputs for each script. Data preparation inputs are label
 
 Scripts are labelled script_
 
-Delete this prefixes when downloading the data and before running the scripts.
+Delete these prefixes when downloading the data and before running the scripts.
 
 Please report problems with running scripts and bugs to y-oswald@web.de.
