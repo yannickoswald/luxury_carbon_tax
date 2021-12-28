@@ -8,10 +8,7 @@ Created on Tue Jun  1 14:01:28 2021
 ##### 'infrastructure' loading ######
 import os
 os.getcwd()
-#work 
-#os.chdir("C:/Users/eeyo/Dropbox/Bildung/PhD/3. paper")
-#home 
-os.chdir("C:/Users/y-osw/Dropbox/Bildung/PhD/3. paper")
+os.chdir("your path")
 
 
 import pandas as pd 
