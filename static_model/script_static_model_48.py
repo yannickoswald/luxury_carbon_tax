@@ -18,9 +18,7 @@
 ##### 'infrastructure' loading ######
 import os
 os.getcwd()
-### work laptop os.chdir("C:/Users/eeyo/Dropbox/Bildung/PhD/3. paper")
-### home laptop
-os.chdir("C:/Users/y-osw/Dropbox/Bildung/PhD/3. paper")
+os.chdir("your path")
 
 
 import pandas as pd 
