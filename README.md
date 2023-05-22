@@ -1,4 +1,6 @@
-# This code is for the study "Oswald et al. 2023 Luxury carbon taxation with revenue recycling improves fairness of climate policy (in preparation)"
+# READ ME AND REPOSITORY DESCRIPTION
+
+This code is for the study "Oswald et al. 2023 Luxury carbon taxation with revenue recycling improves fairness of climate policy (in preparation)"
 
 There are three scripts for this study. All code is Python. 
 
